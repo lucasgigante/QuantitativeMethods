@@ -1,0 +1,944 @@
+---
+title: "Trabalho Final"
+subtitle: Métodos Quantitativos para Análise Multivariada
+date: "Dezembro de 2022"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+**Grupo 11:**\
+Alexandre Kira Pedroso de Lima (4749913)\
+Eduardo dos Santos Fiedler (4938500)\
+Gustavo Henrique de Lima Sá (12542863)\
+Lucas da Silva Serralheiro Gigante (12691898)\
+Nicolas Uhr Braga (12608622)
+
+**Docente:** Esteban Fernandez Tuesta
+
+# Introdução
+
+De acordo com Crescenzi e Rodríguez-Pose¹, é notória a heterogeneidade nas condições socioeconômicas em países em desenvolvimento. No Brasil, a gigantesca dimensão geográfica e territorial promove distintas capacidades de fomento do avanço econômico e científico. O entendimento da relação entre os níveis de produção científica e econômica permite a identificação de pontos de melhoria para o cenário brasileiro.
+
+O presente relatório é um requisito para obtenção de nota na disciplina de Métodos Quantitativos para Análise Multivariada, ministrada no quarto semestre do curso de Sistemas de Informação da Escola de Artes, Ciências e Humanidades (EACH-USP). Foi solicitada a elaboração de um trabalho final envolvendo a análise de um conjunto de dados, o qual foi fornecido pelo professor responsável. Essa atividade teve o intuito de consolidar os temas vistos em aula e complementar com uma aplicação sobre dados reais.
+
+A seção da metodologia tratará das validações e operações realizadas sobre os conjuntos de dados fornecidos, acompanhados de trechos de código, quando pertinente. A seção referente aos resultados contemplará os expostos das conclusões mais relevantes ao trabalho, concluindo o relatório.
+
+Cabe ressaltar que apesar da validação de consistência ter sido aplicada de modo idêntico nos programas em R e Python, foi acordado entre o grupo de oferecer diferentes análises em cada linguagem, de modo a utilizar variáveis diferentes e enriquecer o trabalho.
+
+------------------------------------------------------------------------
+
+¹CRESCENZI, R.; RODRÍGUEZ-POSE, A. *An integrated framework for the comparative analysis of the territorial innovation dynamics of developed and emerging countries*. Journal of Economic Surveys, v. 26, n. 3, p. 517-533, 2012.
+
+# Metodologia
+
+A metodologia levou em conta a preparação e manipulação dos conjuntos de dados fornecidos pelo professor responsável, assim como as diretrizes previstas no enunciado dado:
+
+-   Agrupar os artigos de um pesquisador por instituição ao qual ele está associado.
+
+-   Juntar todas as informações possíveis (produção científica e atividade econômica).
+
+-   Extrair a maior quantidade de conclusões possíveis a respeito da interação ou influência da atividade científica sobre a econômica.
+
+-   Estudar a posição das instituições nas principais localidades, podendo agrupar os dados de acordo com a microrregião/mesorregião (para as atividades econômicas) ou por estado (para as atividades científicas).
+
+Nesse contexto, em linhas gerais, as etapas do trabalho são as seguintes:
+
+**Etapa 1: Importação de bibliotecas e validação dos datasets**
+
+**Etapa 2: Agrupamento de dados**
+
+**Etapa 3: Verificação de correlações: aplicação de técnicas de análise multivariada**
+
+**Etapa 4: Conclusões alcançadas**
+
+A numeração das etapas diz respeito à subseção correspondente do desenvolvimento, que será discutido a seguir.
+
+Vale comentar que a maior parte das análises são comuns tanto ao relatório feito em R quanto ao de Python. Porém, outras foram feitas unicamente em R ou Python.
+
+# Desenvolvimento
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Definindo o diretório
+## IMPORTANTE: os arquivos .txt e .csv (datasets) e o .Rmd devem estar na mesma pasta
+wd <- getwd()
+setwd(wd)
+```
+
+## Etapa 1: Importação de bibliotecas e validação dos *datasets*
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Importando as bibliotecas
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(ggrepel)
+library(hrbrthemes)
+```
+
+Nesta etapa, foi realizado o pré-processamento dos conjuntos de dados, importando cada base de dados e verificando possíveis limitações e inconsistências.
+
+Primeiramente buscou-se entender cada campo de cada base de dados e verificar possíveis inconsistências e limitações que a base poderia conter de forma intrínseca. Em seguida, para algumas base de dados, foram gerados alguns gráficos para entender a distribuição de algumas variáveis. O trabalho foi realizado em cima dos seguintes conjuntos de dados a seguir:
+
+### 1.1. Dados de publicações Arquivo 
+
+`Dados_de_Publicacoes.txt`.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+publicacoes <- readr::read_delim("Dados_de_Publicacoes.txt",
+                                 delim = "\t", escape_double = FALSE,
+                                 trim_ws = TRUE)
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Renomeação das colunas da tabela publicacoes:
+colnames(publicacoes) <- c(
+  'id_author','id_institution_id_state','year', 'journal',
+  'sub-discipline', 'number_of_authors_publication',
+  'weight_authorship', 'weight_journal_indexation', 'weight_final')
+```
+
+A variável escolhida para guardar esta base de dados no R foi `publicacoes` e, logo após a importação, já foi possível identificar o grande volume de dados nesta base, totalizando 739063 linhas com 9 variáveis cada uma. Os campos desta base de dados são:
+
+-   `id` (numeric): identifica de forma única o autor do artigo;
+-   `id_institution` (character): identifica de forma única a instituição e sua unidade federativa, na qual o autor está vinculado;
+-   `year` (numeric): ano da publicação do artigo;
+-   `journal` (numeric): identifica de forma única o jornal onde o artigo foi publicado;
+-   `subdiscipline` (numeric): identifica de forma única a subdisciplina na qual o artigo se enquadra;
+-   `number_of_authors_publication` (numeric): quantidade de autores na publicação;
+-   `weight_authorship` (numeric): peso do autor específico identificado pelo id na linha da publicação (1/quantidade de autores);
+-   `weight_journal_indexation` (numeric): indica em quantas sub-disciplinas está indexada a revista. Quanto mais específica for a revista, ou seja, ter menos sub-disciplinas associadas, maior é o peso do artigo para o peso final;
+-   `weight_final` (numeric): é o resultado da multiplicação do weight_authorship pelo `weight_journal_indexation.`
+
+Nesta primeira referência de dados, foi possível reparar uma determinada padronização na identificação das variáveis e esta padronização será utilizada para dados futuros. Adicionalmente, foi realizado a troca do nome da variável `id` para `id_author`, de forma a caracterizá-la melhor. Outro ponto verificado foi o de que o `id_institution` guarda não somente o id, mas também o código da unidade federativa, desta forma, foi tomada a decisão de renomear a variável `id_institution` para `id_institution_id_state.` Não foi realizada a separação neste momento, porque dado o tamanho da base de dados, esta operação esta onerando muito o processamento, desta forma, foi utilizada a estratégia de realizar operações de seleção e agrupamento primeiro e por fim, já com uma quantidade de dados menor, realizar operações mais custosas, como a de separação citada.
+
+Algumas verificações foram realizadas para verificar a composição e consistência dos dados, são elas:
+
+-   Identificar se um artigo contido na base de dados realizado por mais de um autor tem todos os autores referenciados na base de dados;
+
+-   Verificar se os jornais são mais específicos com poucas subdisciplinas ou se os jornais são mais genéricos com mais subdisciplinas.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Soma dos pesos dos autores de artigos de um determinado jornal:
+publicacoes %>%
+  select(id_author, id_institution_id_state, weight_authorship, journal) %>%
+  group_by(journal)%>%
+  summarize(weight_sum = sum(weight_authorship))
+
+
+```
+
+É importante destacar que caso todos os autores de um determinado artigo estejam cadastrados na base de dados, o resultado da soma dos pesos destes autores deveria ser sempre números pertencentes aos números inteiros maiores do que zero. Nota-se da tabela, que muitos destes valores não são números inteiros, indicando que um ou mais autores não estão cadastrados na base de dados. Como exemplo, para o *journal* "188" onde a soma dos pesos foi de 0,33, isso indica que somente um autor de um artigo que contém três autores está cadastrado na base de dados. Isto acaba impactando a quantidade de artigos por região, como será visto mais a frente. Para estes casos específicos, está sendo adotado neste trabalho que os autores não cadastrados na base de dados são vinculados a regiões estrangeiras e que o objeto de seus estudos não impactam a economia local.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Distribuição da quantidade de artigos por peso do jornal:
+qtd_pub_por_peso_journal <- publicacoes %>%
+  select(id_institution_id_state, weight_authorship, weight_journal_indexation) %>%
+  group_by(weight_journal_indexation)%>%
+  summarize(weight_sum = sum(weight_authorship))
+
+qtd_pub_por_peso_journal %>%
+  ggplot(aes(x = weight_journal_indexation, color = weight_journal_indexation)) +
+  geom_point(aes(y = weight_sum), size = 2) +
+  geom_line(aes(y = weight_sum)) +
+  ylab('Qtd de publicacoes') +
+  xlab('Peso do jornal')
+
+qtd_pub_por_peso_journal %>%
+  ggplot(aes(y = weight_sum, x = weight_journal_indexation, fill = weight_journal_indexation)) +
+  geom_bar(stat = "identity", width = 0.15)
+```
+
+Nota-se que a imensa maioria dos artigos foram publicados em jornais com somente uma subdisciplina, ou seja possuem peso igual a um, de forma que, a depender da análise, não há grandes perdas em selecionar somente jornais deste tipo.
+
+Com os pontos observados, nota-se que a contabilização de artigos publicados em um determinado estado deve ser feito através da soma dos valores de `weight_authorship` das publicações daquele estado.
+
+### 1.2. Instituições
+
+Arquivo `Instituicoes.txt`.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+instituicoes <- readr::read_delim("Instituicoes.txt",
+                                  delim = "\t", escape_double = FALSE,
+                                  trim_ws = TRUE)
+
+```
+
+A variável escolhida para guardar esta base de dados no R foi `instituicoes`. Os campos desta base de dados são:
+
+-   `InstitutionID` (character): definição já discutida anteriormente;
+-   `InstitutionName` (character): nome correlacionado ao código id da instituição;
+-   `State_ID` (numeric): Unidade Federativa da instituição;
+-   `Mesoregion_ID` (numeric): identifica de forma única a macro região onde a instituição está localizada;
+-   `Microregion_ID` (numeric): identifica de forma única a micro região onde a instituição está localizada;
+-   `Municipality_ID` (numeric): código único que identifica o município;
+-   `Municipality_Name` (character): nome do município onde a instituição está localizada.
+
+Nesta referência de dados, foi possível observar uma forma de identificação de colunas não padronizadas. Desta forma, foi realizado uma troca dos valores das colunas para padronização conforme a seguir:
+
+-   De `InstitutionID` para `id_institution`;
+-   De `InstitutionName` para `institution_name`;
+-   De `State_ID` para `id_state`;
+-   De `Mesoregion_ID` para `id_mesoregion`;
+-   De `Microregion_ID` para `id_microregion`;
+-   De `Municipality_ID` para `id_municipality`;
+-   De `Municipality_Name` para `name_municipality`.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Renomeação das colunas da tabela:
+colnames(instituicoes) <- c(
+  'id_institution','institution_name','id_state', 'id_mesoregion',
+  'id_microregion', 'id_municipality', 'name_municipality')
+```
+
+Algumas verificações foram realizadas para verificar a composição e consistência dos dados. São elas:
+
+-   Como na base de dados `publicacoes` existiam valores de `id_institution_id_state` com códigos iguais para `id_institution` e diferentes para `id_state` da variável `instituicoes`, foi analisado se uma instituicao está localizada em diferentes unidades federativas;
+
+-   De forma a entender como os dados de localização estão correlacionados e verificar alguma possível inconsistência, alguns agrupamentos foram realizados.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Quantidade de unidades de uma mesma instituicao em diferentes estados
+instituicoes %>%
+  select(id_institution, id_state) %>%
+  group_by(id_institution)%>%
+  summarize(qtd = n())
+
+instituicoes[instituicoes$id_institution=="000100000991",]
+```
+
+Ao longo da análise descritiva, foram detectadas diversas inconsistências no conjunto de dados `Instituicoes.txt`, como por exemplo, diferentes instituições estavam cadastradas com o mesmo id. O id `000100000991` possuia, de forma errônea, 7.879 instituições cadastradas. Inicialmente, decidiu-se pela subutilização deste *dataset*.
+
+Após contactar o professor, este forneceu o conjunto de dados `Instituicoes_nova.txt`, o qual contém os mesmos dados, porém sem inconsistências.
+
+Retoma-se então o trabaho com as instituições, considerando agora o arquivo:
+
+Arquivo `Instituicoes_nova.txt`.
+
+Nesta nova base de dados, foi feita a verificação se alguma instituição está presente em mais de um estado, solicitando uma tabela destas instituições, conforme abaixo:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+instituicoes <- readr::read_delim("Instituicoes_nova.txt",
+                                  delim = "\t", escape_double = FALSE,
+                                  trim_ws = TRUE)
+
+## Renomeação das colunas da tabela:
+colnames(instituicoes) <- c(
+  'id_institution','institution_name','id_state', 'id_mesoregion',
+  'id_microregion', 'id_municipality', 'name_municipality')
+
+## Verificação de quantidade de unidades de um mesmo instituto em diferentes estato
+qtd_unidades <- instituicoes %>%
+  select(id_institution, id_state) %>%
+  group_by(id_institution)%>%
+  summarize(qtd = n())
+
+## Identificação de instituicoes com mais de uma unidade em estados diferentes:
+## Como a identificação de estado é única, faz-se necessário ocorrer diferentes linhas com o mesmo id e diferentes estados para identificar um mesmo instituto localizado em estados diferentes. Desta forma, selecionar os id_institution e agrupar pelo id irá identificar estas unidades.
+
+qtd_unidades[qtd_unidades$qtd >1,]
+
+```
+
+Nota-se que a nova base de dados não possui nenhuma instituição com referência a mais do que um estado. Porém, este comportamento está registrado na base `publicacoes`. Desta forma, decidiu-se utilizar esta localização única de uma instituição como se fosse o escritório central do instituto e nunca para a localização de uma publicação em si.
+
+Verificação do comportamento das variáveis de localização:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Verificação de comportamento das variáveis de localização
+instituicoes %>%
+select(id_state, id_mesoregion, id_microregion, id_municipality) %>%
+group_by(id_state, id_mesoregion, id_microregion, id_municipality)%>%
+summarize(qtd = n())
+
+```
+
+Da análise dos dados, é possível observar que um estado pode possuir diferentes macrorregiões, que por sua vez pode possuir diferentes microrregiões, que por sua vez pode possuir diferentes municípios, que por fim pode ser local de diferentes instituições. Fica uma dúvida se uma determinada macrorregião pode estar localizada em região de fronteira estadual, de forma a se localizar em dois estados. Da mesma forma, o pensamento pode ser extendido para microrregião e municípios. Para retirar esta dúvida, foram feitas as seguintes consultas na base de dados:
+
+-   Seleção de mesorregião e estado, com agrupamento por mesorregião, somando a quantidade de ocorrências distintas. A partir desta seleção, buscou-se quantidades maiores do que um, ou seja, uma macrorregião correlacionada com dois estados distintos:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Verificação se uma determinada macroregião pode estar localizada em mais do que um estado:
+qtd_estado_por_mesoregion <- instituicoes %>%
+select(id_mesoregion, id_state)%>%
+distinct()%>%
+group_by(id_mesoregion)%>%
+summarize(qtd=n())
+qtd_estado_por_mesoregion[qtd_estado_por_mesoregion$qtd>1,]
+
+```
+
+Com o resultado igual a zero, pode-se afirmar que não há uma macrorregião de fronteira com localização em dois estados.
+
+-   Seleção de microrregião e mesorregião, com agrupamento por microrregião, somando a quantidade de ocorrências distintas. A partir desta seleção, buscou-se quantidades maiores do que um, ou seja, uma microrregião correlacionada com duas macrorregiões distintas:
+
+    ```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+    ## Verificação se uma determinada microregião pode estar localizada em mais do que uma macroregião:
+    resultado <- instituicoes %>%
+    select(id_microregion ,id_mesoregion)%>%
+    distinct()%>%
+    group_by(id_microregion)%>%
+    summarize(qtd=n())
+    resultado[resultado$qtd>1,]
+    ```
+
+Com o resultado igual a zero, pode-se afirmar que não há uma microrregião com localização em duas macrorregiões.
+
+-   Seleção de município e microrregião, com agrupamento por microrregião, somando a quantidade de ocorrências distintas. A partir desta seleção, buscou-se quantidades maiores do que um, ou seja, um município correlacionado com duas microrregiões distintas:
+
+    ```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+    ## Verificação se um determinado município pode estar localizado em mais do que uma microregião:
+    resultado <- instituicoes %>%
+    select(id_municipality, id_microregion)%>%
+    distinct()%>%
+    group_by(id_municipality)%>%
+    summarize(qtd=n())
+
+    resultado[resultado$qtd>1,]
+
+    ```
+
+Com o resultado igual a zero, pode-se afirmar que não há uma microrregião com localização em duas macrorregiões.
+
+Desta forma, confirma-se que um município está relacionado à somente uma microrregião, que está relacionado somente a uma macrorregião, que por fim está relacionado à somente uma unidade federativa.
+
+### 1.3. Subdisciplinas
+
+Arquivo `Subdisciplinas.xlsx`.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+subdisciplinas <- read_excel("Subdisciplinas.xlsx")
+```
+
+A variável escolhida para guardar esta base de dados no R foi `subdisciplinas`. Os campos desta base de dados são:
+
+-   `subd_id` (numeric): código de identificação único de uma subdisciplina;
+-   `subd_name` (character): nome da subdisciplina;
+-   `disc_id` (numeric): código de identificação único de uma disciplina.
+
+Duas verificações foram realizadas para verificar a composição e consistência dos dados. São elas:
+
+-   **Verificação se a relação entre uma disciplina e uma subdisciplina é do tipo (`1:n`)**: primeiramente, realizou-se uma seleção das disciplinas e subdisciplinas agrupadas por subdisciplina, realizando a contagem subdisciplinas por disciplina. O resultado esperado é de 1 ou mais subdisciplinas por disciplina. A seguir, foi realizada a mesma seleção porém agrupada por disciplinas, somando as linhas distintas e aplicando um filtro para quantidades maiores do que um. O resultado esperado seria vazio, indicando que nenhuma subdisciplina está ligada a mais do que uma disciplina:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Verificação se a relação de uma disciplina com uma subdisciplina é de (1:n):
+resultado <- subdisciplinas %>%
+select(disc_id, subd_id) %>%
+group_by(disc_id)%>%
+summarize(qtd=n())
+resultado
+
+resultado <- subdisciplinas %>%
+select(disc_id, subd_id) %>%
+group_by(subd_id)%>%
+summarize(qtd=n())
+resultado[resultado$qtd>1,]
+## Confirmado que a relação é de (1:n).
+
+```
+
+-   **Verificação se os nomes das subdisciplinas são únicos**: garantir que um nome específico de uma subdisciplina pudesse vir a estar ligado a duas disciplinas distintas. Primeiramente, foi buscado a quantidade de linhas da base de dados subdisciplinas. Na sequência, foi selecionado somente os nomes das disciplinas, aplicado um filtro para manter somente os nomes distintos, calculando a quantidade resultante após o filtro. O valor resultante foi comparado com a quantidade inicial de sublinhas e tiveram valores iguais, indicando que os nomes das subdisciplinas são únicos. Abaixo, estão os resultadas das consultas indicadas em sequência:
+
+    ```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+
+    ## Verificação de que o nome da subdisciplina é único
+
+    qtdLinhasSubdisc <- length(subdisciplinas$subd_name)
+    qtdLinhasSubdisc
+
+    resultado <- subdisciplinas %>%
+    select(subd_name)%>%
+    distinct()
+    qtdLinhasSubdiscDist <- length(resultado$subd_name)
+    qtdLinhasSubdiscDist
+    ## Confirmado que os nomes também são únicos.
+    ```
+
+Com as consultas acima, foi possível confirmar a relação (`1:n`) entre disciplina e subdisciplina, e também a unicidade dos nomes das subdisciplinas.
+
+### 1.4. PIB dos Municípios (2010-2015)
+
+Arquivo `PIB dos Municípios - base de dados 2010-2015.xls`.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+pib_municipios <- read_excel("PIB dos Municípios - base de dados 2010-2015.xls")
+```
+
+A variável escolhida para guardar esta base de dados no R foi `pib_municipios.` Esta base de dados tem inúmeros campos e muitos deles não serão utilizados na análise deste trabalho. Desta forma, ficará salvo na variável `pib_municipios` somente as variáveis:
+
+-   `year` (character): ano do PIB. Necessário mudar o tipo de dado para numeric;
+-   `id_state` (numeric): Unidade Federativa da instituição;
+-   `name_state` (character): nome da unidade da federaçao;
+-   `id_municipality` (numeric): código único que identifica o município;
+-   `name_municipality` (character): nome do município onde a instituição está localizada;
+-   `pib` (numeric): produto interno bruto;
+-   `population` (numeric): população do municipio.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+localizacao <- pib_municipios[,-c(1,6,11,12,13,14,15,16:22)]
+colnames(localizacao) <- c(
+  'id_state', 'name_state','id_municipality','name_municipality', 'id_mesoregiao', 'name_mesoregiao', 'id_microregiao', 'name_microregiao')
+localizacao <- localizacao %>%
+  select(id_state, name_state, id_mesoregiao, name_mesoregiao, id_microregiao, name_microregiao, id_municipality, name_municipality)%>%
+  distinct()
+
+localizacao<-localizacao %>%
+  mutate(
+    id_mesoregiao = paste(
+      str_sub(`id_mesoregiao`, 0, 2),
+      "00",
+      str_sub(`id_mesoregiao`, -2, -1), 
+      sep=""),
+    id_microregiao=paste(
+      str_sub(`id_microregiao`, 0,2),
+      "0",
+      str_sub(`id_microregiao`, -3, -1), 
+      sep="")
+    )
+
+## Não há pelo menos até o momento nenhuma perspectiva de utilização das colunas
+## 3 - Nome da Unidade da Federação, 4 - Código do Município, 5 - Nome do Município, e por aí vai...
+pib_municipios <- pib_municipios[,-c(6,7,8,9,10,11,12,13,14,15,16,19,20,21,22)]
+
+## Padronização dos nomes das variáveis iniciando sempre com maiúscula, sem espaço entre nomes
+## e colocando maiúscula em cada inicial de nome.
+colnames(pib_municipios) <- c(
+  'year', 'id_state', 'name_state','id_municipality','name_municipality', 'pib', 'population')
+## Alterando o tipo da variável Year para numeric
+pib_municipios <- pib_municipios %>%
+  mutate(year = as.numeric(year))
+pib_municipios
+```
+
+Na verificação de consistência, além da adequação do nome das variáveis, foi realizada a alteração do tipo da variável `year` de character para numeric.
+
+### 1.5. Atividades econômicas desenvolvidas contadas pelo número de estabelecimentos em cada prefeitura por ano
+
+Arquivos:
+
+`RAIS_N_ESTABELECIMENTOS_2010.csv`
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2010 <- readr::read_delim("RAIS_N_ESTABELECIMENTOS_2010.csv",
+                               delim = ";", escape_double = FALSE, col_names = FALSE,
+                               locale = locale(encoding = "LATIN1"),
+                               trim_ws = TRUE, skip = 1)
+
+estab2010 <- estab2010 %>% as.data.frame()
+names(estab2010) <- estab2010[1, ]
+estab2010 <- estab2010 %>%
+  dplyr::slice(-1)
+estab2010 <- estab2010 %>%
+  na.omit()
+
+##Hardcode. Só faz sentido para esta base de dados na situação atual.
+estab2010 <- estab2010 %>%
+  dplyr::slice(-(5658:5660))
+```
+
+`RAIS_N_ESTABELECIMENTOS_2011.csv`
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2011 <- readr::read_delim("RAIS_N_ESTABELECIMENTOS_2011.csv",
+                               delim = ";", escape_double = FALSE, col_names = FALSE,
+                               locale = locale(encoding = "LATIN1"),
+                               trim_ws = TRUE, skip = 1)
+
+estab2011 <- estab2011 %>% as.data.frame()
+names(estab2011) <- estab2011[1, ]
+estab2011 <- estab2011 %>%
+  dplyr::slice(-1)
+estab2011 <- estab2011 %>%
+  na.omit()
+
+##Hardcode. Só faz sentido para esta base de dados na situação atual.
+estab2011 <- estab2011 %>%
+  dplyr::slice(-(5658:5660))
+```
+
+`RAIS_N_ESTABELECIMENTOS_2012.csv`
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2012 <- readr::read_delim("RAIS_N_ESTABELECIMENTOS_2012.csv",
+                               delim = ";", escape_double = FALSE, col_names = FALSE,
+                               locale = locale(encoding = "LATIN1"),
+                               trim_ws = TRUE, skip = 1)
+
+estab2012 <- estab2012 %>% as.data.frame()
+names(estab2012) <- estab2012[1, ]
+estab2012 <- estab2012 %>%
+  dplyr::slice(-1)
+estab2012 <- estab2012 %>%
+  na.omit()
+##Hardcode. Só faz sentido para esta base de dados na situação atual.
+estab2012 <- estab2012 %>%
+  dplyr::slice(-(5658:5660))
+```
+
+`RAIS_N_ESTABELECIMENTOS_2013.csv`
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2013 <- readr::read_delim("RAIS_N_ESTABELECIMENTOS_2013.csv",
+                               delim = ";", escape_double = FALSE, col_names = FALSE,
+                               locale = locale(encoding = "LATIN1"),
+                               trim_ws = TRUE, skip = 1)
+
+estab2013 <- estab2013 %>% as.data.frame()
+names(estab2013) <- estab2013[1, ]
+estab2013 <- estab2013 %>%
+  dplyr::slice(-1)
+estab2013 <- estab2013 %>%
+  na.omit()
+##Hardcode. Só faz sentido para esta base de dados na situação atual.
+estab2013 <- estab2013 %>%
+  dplyr::slice(-(5658:5660))
+```
+
+`RAIS_N_ESTABELECIMENTOS_2014.csv`
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2014 <- readr::read_delim("RAIS_N_ESTABELECIMENTOS_2014.csv",
+                               delim = ";", escape_double = FALSE, col_names = FALSE,
+                               locale = locale(encoding = "LATIN1"),
+                               trim_ws = TRUE, skip = 1)
+
+estab2014 <- estab2014 %>% as.data.frame()
+names(estab2014) <- estab2014[1, ]
+estab2014 <- estab2014 %>%
+  dplyr::slice(-1)
+estab2014 <- estab2014 %>%
+  na.omit()
+##Hardcode. Só faz sentido para esta base de dados na situação atual.
+estab2014 <- estab2014 %>%
+  dplyr::slice(-(5658:5660))
+```
+
+`RAIS_N_ESTABELECIMENTOS_2015.csv`
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2015 <- readr::read_delim("RAIS_N_ESTABELECIMENTOS_2015.csv",
+                               delim = ";", escape_double = FALSE, col_names = FALSE,
+                               locale = locale(encoding = "LATIN1"),
+                               trim_ws = TRUE, skip = 1)
+
+estab2015 <- estab2015 %>% as.data.frame()
+names(estab2015) <- estab2015[1, ]
+estab2015 <- estab2015 %>%
+  dplyr::slice(-1)
+estab2015 <- estab2015 %>%
+  na.omit() # importando sem as últimas 4 linhas, as quais contêm valores NA
+##Hardcode. Só faz sentido para esta base de dados na situação atual.
+estab2015 <- estab2015 %>%
+  dplyr::slice(-(5658:5660))
+```
+
+As seis bases de dados acima exigiram o mesmo tratamento no pré-processamento dos dados, que basicamente consistiram na adequação das informações em um *dataframe*, na exclusão das últimas linhas de cada base de dados e das linhas que não representavam informações de um determinado município, como por exemplo a linha de totalização de todos os valores da tabela. Além disso, foram feitas as seguintes alterações: - Adequação do campo Município para ter somente o nome do município e alterado o nome do campo para name_municipality; - Inserção de id_state; - Inserção de id_municipality.
+
+Segue abaixo a base de dados de 2015 após os tratamentos citados:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+estab2015
+```
+
+## Etapa 2: Agrupamento de dados
+
+### 2.1. Agrupar os artigos de um pesquisador por instituição ao qual ele está associado
+
+Para agrupar os artigos de um pesquisador por instituição, utilizou-se a base de dados `publicacoes`.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+
+qtd_artigos_por_autor <- publicacoes %>%
+  select(id_institution_id_state, id_author)%>%
+  group_by(id_institution_id_state, id_author)%>%
+  summarize(qtd_artigos=n())
+
+qtd_artigos_por_autor
+```
+
+### 2.2. Agrupar os artigos por instituição por estado
+
+Cabe destacar que a quantidade de artigos obtidos na tabela anterior está relacionada ao autor do artigo, ou seja, pesquisadores da mesma instituição que publicaram um artigo em conjunto aparecerão na tabela mais do que uma vez. Desta forma, esta tabela só serve para a contabilização dos artigos por autor. Para ter a quantidade de artigos por instituição, deve-se utilizar a somatória da coluna `weight_authorship`. Como a identificação da instituição está agrupada com o id do estado, primeiramente calcula-se a quantidade de artigos por instituição por estado, conforme abaixo:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+
+qtd_artigos_por_instituicao_por_estado <- publicacoes %>%
+select(id_institution_id_state, id_author, weight_authorship)%>%
+group_by(id_institution_id_state)%>%
+summarize(qtd_artigos=sum(ceiling(weight_authorship)))
+qtd_artigos_por_instituicao_por_estado
+
+```
+
+### 2.3. Agrupar os artigos por instituição
+
+A contabilização dos artigos por instituição independentemente do estado fica:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+
+qtd_artigos_por_instituicao <- qtd_artigos_por_instituicao_por_estado %>%
+select(id_institution_id_state, qtd_artigos)%>%
+mutate(id_state= as.numeric(str_sub(`id_institution_id_state`, -2,-1)),
+       id_institution_id_state = str_sub(`id_institution_id_state`, 0,-4))%>%
+group_by(id_institution_id_state)%>%
+summarize(qtd_artigos = sum(qtd_artigos))
+qtd_artigos_por_instituicao
+
+```
+
+### 2.4. Agrupar os artigos por ano por estado
+
+De forma a possibilitar uma comparação entre atividade econômica e atividade científica, faz-se necessário agrupar os artigos por uma posição geográfica e dentro de um período específico de tempo, neste caso pelo estado e por ano, respectivamente. Desta forma, o agrupamento fica conforme abaixo:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+qtd_artigos_por_estado_por_ano <-publicacoes %>%
+select(id_institution_id_state, year, weight_authorship)%>%
+mutate(id_state= as.numeric(str_sub(`id_institution_id_state`, -2,-1)),
+       id_institution_id_state = str_sub(`id_institution_id_state`, 0,-4))%>%
+group_by(year, id_state)%>%
+summarize(qtd_artigos=sum(ceiling(weight_authorship)))
+qtd_artigos_por_estado_por_ano
+
+
+```
+
+## Etapa 3: Verificação de correlações: aplicação de técnicas de análise multivariada
+
+### 3.1. Agrupar o PIB por estado
+
+Como uma das principais informações resumidas de publicações é a contagem das publicações por estado, o agrupamento do PIB por estado permitirá analisar o PIB por estado em função das publicações por estado. Agrupando o PIB por estado:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+pib_por_estado_por_ano <-pib_municipios %>%
+select(year, id_state, pib)%>%
+group_by(year, id_state)%>%
+summarize(pib=sum(pib))
+pib_por_estado_por_ano
+
+```
+
+## Etapa 4: Conclusões alcançadas
+
+### 4.1. PIB em função da quantidade de publicações por ano
+
+A principal análise do estudo é a visualização do resultado econômico em função da atividade acadêmica. Para isso, segue gráfico dessa relação, considerando os anos de 2010 a 2015:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Colocado o nome do estado para referenciar no gráfico
+pib_pub_por_ano_por_estado <- merge(pib_por_estado_por_ano, qtd_artigos_por_estado_por_ano,
+                                  by = c('year', 'id_state'), all = TRUE)
+state <- pib_municipios %>%
+select(id_state, name_state)%>%
+distinct()
+
+pib_pub_por_ano_por_estado<-merge(pib_pub_por_ano_por_estado, state, by = c('id_state'), all = TRUE)
+
+pib_pub_por_ano_por_estado %>%
+ggplot(aes(x = qtd_artigos, color = name_state)) +
+geom_point(aes(y = pib, shape = ''), size = 2) +
+geom_line(aes(y = pib, group = name_state )) +
+theme_bw() +
+labs(x="Número de Artigos", y="PIB", color = 'Código UF', shape = '') +
+theme(legend.position = 'bottom') +
+guides(color=guide_legend(nrow=3, byrow=TRUE))
+
+```
+
+Do gráfico pode-se observar um comportamento diretamente proporcional entre o desempenho econômico de um estado (referente aos anos de 2010 a 2015) em relação à quantidade de artigos publicados, ou seja, quanto maior a quantidade de publicações, maior o PIB do estado.
+
+### 4.2. PIB em função da quantidade de publicações ponderado pela classificação do periódico por ano (não realizado)
+
+De forma a deixar explícito neste relatório, não foi realizada a análise da quantidade de periódicos ponderadas por peso, isto porque a quantidade de publicações com peso abaixo de um é insignificante comparada às demais, não trazendo assim valores discrepantes em relação ao gráfico anterior.
+
+### 4.3. *Ranking* da quantidade de publicações no estado de São Paulo
+
+Do gráfico do item 4.1, nota-se que o estado de São Paulo se destaca em relação aos demais, tanto na quantidade de publicações quanto no PIB, desta forma, foi realizada uma análise mais detalhada, conforme a seguir:
+
+Primeiramente, foi feito um filtro das dez instituições que mais publicaram a cada ano de 2010 a 2015. Verificando as instituições que ficaram neste filtro, foi observado que apenas 13 instituições participaram destes grupos anuais.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Publicações do estado de São Paulo
+
+pub_sp = publicacoes %>%
+  select(id_institution_id_state, year,weight_authorship) %>%
+  mutate(id_state= as.numeric(str_sub(`id_institution_id_state`, -2,-1)),
+         id_institution_id_state = str_sub(`id_institution_id_state`, 0,-4))
+
+colnames(pub_sp) <- c(
+  'id_institution','year', 'weight_authorship', 'id_state')
+
+pub_sp<-
+  pub_sp[pub_sp$id_state==35,]%>%
+  group_by(id_institution, year)%>%
+  summarize(qtd_artigos=ceiling(sum(weight_authorship)))
+
+pub_sp_2010<- pub_sp[pub_sp$year==2010,]%>%
+  group_by(id_institution)%>%
+  summarize(qtd_artigos=sum(qtd_artigos))
+
+pub_sp_2011<- pub_sp[pub_sp$year==2011,]%>%
+  group_by(id_institution)%>%
+  summarize(qtd_artigos=sum(qtd_artigos))
+
+pub_sp_2012<- pub_sp[pub_sp$year==2012,]%>%
+  group_by(id_institution)%>%
+  summarize(qtd_artigos=sum(qtd_artigos))
+
+pub_sp_2013<- pub_sp[pub_sp$year==2013,]%>%
+  group_by(id_institution)%>%
+  summarize(qtd_artigos=sum(qtd_artigos))
+
+pub_sp_2014<- pub_sp[pub_sp$year==2014,]%>%
+  group_by(id_institution)%>%
+  summarize(qtd_artigos=sum(qtd_artigos))
+
+pub_sp_2015<- pub_sp[pub_sp$year==2015,]%>%
+  group_by(id_institution)%>%
+  summarize(qtd_artigos=sum(qtd_artigos))
+
+pub_sp_2010 <- pub_sp_2010[order(pub_sp_2010$qtd_artigos, decreasing=TRUE),]
+pub_sp_2011 <- pub_sp_2011[order(pub_sp_2011$qtd_artigos, decreasing=TRUE),]
+pub_sp_2012 <- pub_sp_2012[order(pub_sp_2012$qtd_artigos, decreasing=TRUE),]
+pub_sp_2013 <- pub_sp_2013[order(pub_sp_2013$qtd_artigos, decreasing=TRUE),]
+pub_sp_2014 <- pub_sp_2014[order(pub_sp_2014$qtd_artigos, decreasing=TRUE),]
+pub_sp_2015 <- pub_sp_2015[order(pub_sp_2015$qtd_artigos, decreasing=TRUE),]
+
+
+inst_sp_10_maiores<-
+  bind_rows(
+    slice_head(pub_sp_2010, n=10),
+    slice_head(pub_sp_2011, n=10),
+    slice_head(pub_sp_2012, n=10),
+    slice_head(pub_sp_2013, n=10),
+    slice_head(pub_sp_2014, n=10),
+    slice_head(pub_sp_2015, n=10)
+  )%>%
+  select(id_institution)%>%
+  distinct()
+
+inst_sp_10_maiores <- inst_sp_10_maiores %>%
+  inner_join(pub_sp, by = c('id_institution' = 'id_institution'))
+
+inst_sp_10_maiores <- inst_sp_10_maiores %>%
+  inner_join(
+    instituicoes %>%
+      select(id_institution, institution_name),
+    by = c('id_institution' = 'id_institution'))
+
+inst_sp_10_maiores%>%
+  select(institution_name, year, qtd_artigos)
+
+```
+
+A seguir, foram agrupadas estas treze instituições com suas publicações para verificar como foi o comportamento desta "disputa" ao longo destes seis anos (de 2010 a 2015) e apresentadas no gráfico a seguir:
+
+De forma a facilitar a visualização, foi observado que as quatro primeiras instituições se destacam das demais, de forma que inicialmente apresenta-se as quatro primeiras colocadas:
+
+(1) Universidade de São Paulo
+
+(2) Universidade Estadual Paulista Julio de Mesquita Filho
+
+(3) Universidade Estadual de Campinas
+
+(4) Universidade Federal de São Paulo
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+## Gráfico das publicações de uma instituição que figurou entre as 10 que mais publicaram por ano entre os anos de 2010 e 2015
+
+for (i in 1:nrow(inst_sp_10_maiores)){
+  if(inst_sp_10_maiores[i,1]=='006200000003'){
+    inst_sp_10_maiores[i,4]="UNIVERSIDADE FEDERAL DE SAO PAULO"
+  }
+}
+
+slice_head(inst_sp_10_maiores, n=24) %>%
+  ggplot(aes(x = year, color = institution_name)) +
+  geom_point(aes(y = qtd_artigos, shape = ''), size = 2) +
+  geom_line(aes(y = qtd_artigos, group = institution_name )) +
+  theme_bw() +
+  labs(color = 'Nome da Instituição', shape = '') +
+  ylab('Quantidade de publicações') +
+  theme(legend.position = 'bottom') +
+  scale_y_continuous(name="Quantidade de publicações") +
+  guides(color=guide_legend(ncol=1, bycol=TRUE))
+
+```
+
+É possível observar que nas quatro primeiras colocações somente a segunda e a terceira colocada se aproximam porém sem ocorrer uma alternância de colocação. Cabe destacar também que ocorreu uma queda de publicações ano a ano durante o período analisado para estas instituições.
+
+A seguir, apresenta-se as demais instituições a partir da quinta colocada que, em algum momento, figuraram entre as dez que mais publicaram no estado de São Paulo no ano:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+slice_tail(inst_sp_10_maiores, n=54) %>%  
+ggplot(aes(x = year, color = institution_name)) +
+geom_point(aes(y = qtd_artigos, shape = ''), size = 2) +
+geom_line(aes(y = qtd_artigos, group = institution_name )) +
+theme_bw() +
+labs(color = 'Nome da Instituição', shape = '') +
+ylab('Quantidade de publicações') +
+theme(legend.position = 'bottom') +
+scale_y_continuous(name="Quantidade de publicações") +
+guides(color=guide_legend(ncol=1, bycol=TRUE))
+```
+
+Nota-se que, apesar de haver algumas variações, as instituições mantêm um certo patamar de publicações ano a ano, demonstrando assim um certo incentivo para publicação e uma certa cultura de publicação nestes institutos.
+
+### 4.4. Ranking do PIB no estado de São Paulo por macrorregião
+
+Após o olhar sobre as publicações, realiza-se uma análise do PIB por macrorregião:
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+
+pib_sp_mesoregiao<-pib_municipios[pib_municipios$id_state==35,] %>%
+select(year, id_municipality, pib) %>%
+inner_join(
+  localizacao%>%
+    select(id_municipality, id_mesoregiao, name_mesoregiao),
+  by = c('id_municipality'='id_municipality'))
+pib_sp_mesoregiao<- pib_sp_mesoregiao%>%
+group_by(id_mesoregiao,name_mesoregiao, year)%>%
+summarize(pib=sum(pib))
+
+
+pib_sp_2010<- pib_sp_mesoregiao[pib_sp_mesoregiao$year==2010,] %>%
+select('id_mesoregiao', 'name_mesoregiao', 'pib')
+
+pib_sp_2011<- pib_sp_mesoregiao[pib_sp_mesoregiao$year==2011,]%>%
+select('id_mesoregiao', 'name_mesoregiao', 'pib')
+
+pib_sp_2012<- pib_sp_mesoregiao[pib_sp_mesoregiao$year==2012,]%>%
+select('id_mesoregiao', 'name_mesoregiao', 'pib')
+
+pib_sp_2013<- pib_sp_mesoregiao[pib_sp_mesoregiao$year==2013,]%>%
+select('id_mesoregiao', 'name_mesoregiao', 'pib')
+
+pib_sp_2014<- pib_sp_mesoregiao[pib_sp_mesoregiao$year==2014,]%>%
+select('id_mesoregiao', 'name_mesoregiao', 'pib')
+
+pib_sp_2015<- pib_sp_mesoregiao[pib_sp_mesoregiao$year==2015,]%>%
+select('id_mesoregiao', 'name_mesoregiao', 'pib')
+
+pib_sp_2010 <- pib_sp_2010[order(pib_sp_2010$pib, decreasing=TRUE),]
+pib_sp_2011 <- pib_sp_2011[order(pib_sp_2011$pib, decreasing=TRUE),]
+pib_sp_2012 <- pib_sp_2012[order(pib_sp_2012$pib, decreasing=TRUE),]
+pib_sp_2013 <- pib_sp_2013[order(pib_sp_2013$pib, decreasing=TRUE),]
+pib_sp_2014 <- pib_sp_2014[order(pib_sp_2014$pib, decreasing=TRUE),]
+pib_sp_2015 <- pib_sp_2015[order(pib_sp_2015$pib, decreasing=TRUE),]
+
+mesoregiao_sp_5_maiores<-
+bind_rows(
+  head(pib_sp_2010, 5),
+  head(pib_sp_2011, 5),
+  head(pib_sp_2012, 5),
+  head(pib_sp_2013, 5),
+  head(pib_sp_2014, 5),
+  head(pib_sp_2015, 5)
+)%>%
+select(id_mesoregiao, name_mesoregiao)%>%
+distinct()
+
+mesoregiao_sp_5_maiores<-mesoregiao_sp_5_maiores%>%
+inner_join(
+  pib_sp_mesoregiao%>%
+    select(year,pib,id_mesoregiao),
+  by = c('id_mesoregiao' = 'id_mesoregiao')
+)
+
+mesoregiao_sp_5_maiores %>%  
+ggplot(aes(x = year, color = name_mesoregiao.x)) +
+geom_point(aes(y = pib, shape = ''), size = 2) +
+geom_line(aes(y = pib, group = name_mesoregiao.x )) +
+theme_bw() +
+labs(color = 'Nome da mesoregiao', shape = '', y = 'PIB', x = 'ano')+
+theme(legend.position = 'bottom') +
+guides(color=guide_legend(ncol=3, bycol=TRUE))
+
+```
+
+### 4.5.Ranking das subdisciplinas com mais artigos publicados no estado de São Paulo
+
+Para o estado de São Paulo, assim como feito com as instituições e as mesoregiões, foi realizado o ranking das cinco subdisciplinas que mais publicaram entre 2010 e 2015, e observado o comportamento delas ao longo dos anos.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+
+subdisc_sp <- publicacoes %>% 
+  select(id_institution_id_state, `sub-discipline`, weight_final, year)
+subdisc_sp<-subdisc_sp%>%
+  mutate(id_state = as.numeric(str_sub(`id_institution_id_state`, -2,-1)))
+subdisc_sp <- subdisc_sp[subdisc_sp$id_state==35,]
+
+subdisc_sp <- subdisc_sp %>%
+  select(`sub-discipline`, weight_final, year) %>%
+  group_by(`sub-discipline`, year) %>%
+  summarize(qtd_artigos = ceiling(sum(weight_final)))
+
+subdisc_sp_2010 <- subdisc_sp[subdisc_sp$year==2010,]
+subdisc_sp_2010 <- subdisc_sp_2010[order(subdisc_sp_2010$qtd_artigos, decreasing = TRUE),]
+
+subdisc_sp_2011 <- subdisc_sp[subdisc_sp$year==2011,]
+subdisc_sp_2011 <- subdisc_sp_2011[order(subdisc_sp_2011$qtd_artigos, decreasing = TRUE),]
+
+subdisc_sp_2012 <- subdisc_sp[subdisc_sp$year==2012,]
+subdisc_sp_2012 <- subdisc_sp_2012[order(subdisc_sp_2012$qtd_artigos, decreasing = TRUE),]
+
+subdisc_sp_2013 <- subdisc_sp[subdisc_sp$year==2013,]
+subdisc_sp_2013 <- subdisc_sp_2013[order(subdisc_sp_2013$qtd_artigos, decreasing = TRUE),]
+
+subdisc_sp_2014 <- subdisc_sp[subdisc_sp$year==2014,]
+subdisc_sp_2014 <- subdisc_sp_2014[order(subdisc_sp_2014$qtd_artigos, decreasing = TRUE),]
+
+subdisc_sp_2015 <- subdisc_sp[subdisc_sp$year==2015,]
+subdisc_sp_2015 <- subdisc_sp_2015[order(subdisc_sp_2015$qtd_artigos, decreasing = TRUE),]
+
+subdisc_sp_5_maiores<-
+  bind_rows(
+    head(subdisc_sp_2010, 5),
+    head(subdisc_sp_2011, 5),
+    head(subdisc_sp_2012, 5),
+    head(subdisc_sp_2013, 5),
+    head(subdisc_sp_2014, 5),
+    head(subdisc_sp_2015, 5)
+  )%>%
+  select(`sub-discipline`)%>%
+  distinct()
+
+
+subdisc_sp_5_maiores<-subdisc_sp_5_maiores %>%
+  inner_join(subdisciplinas, by = c('sub-discipline' = 'subd_id'))
+
+subdisc_sp_5_maiores
+
+
+```
+
+As nove subdisciplinas acima foram selecionadas porque em algum ano entre 2010 e 2015 figuraram entre as 5 subdisciplinas que mais publicaram no ano em São Paulo.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+subdisc_sp_5_maiores %>% 
+  inner_join(subdisc_sp, by = c('sub-discipline' = 'sub-discipline'))
+
+subdisc_sp_5_maiores %>% 
+  inner_join(subdisc_sp, by = c('sub-discipline' = 'sub-discipline'))%>%
+  ggplot(aes(x = year, color = subd_name)) +
+  geom_point(aes(y = qtd_artigos, shape = ''), size = 2) +
+  geom_line(aes(y = qtd_artigos, group = subd_name )) +
+  theme_bw() +
+  labs(color = 'Subdisciplina', shape = '', y = 'Quantidade de artigos', x = 'ano')+
+  theme(legend.position = 'bottom') +
+  guides(color=guide_legend(ncol=3, bycol=TRUE))
+
+```
+
+No período, nota-se uma grande ascenção de publicações na subdisciplina de Métodos de biologia molecular e uma grande queda de fisiologia do inseto.
+
+# Conclusão
+
+Durante o desenvolvimento do trabalho, foi possível observar que o pré-processamento dos dados é a etapa de maior esforço, dado que é nesta etapa que é possível observar melhor o comportamento de cada variável e a integridade das mesmas.
+
+Um outro ponto de grande esforço foi o de encontrar soluções de programação específica de cada linguagem para cada situação específica, como por exemplo, alteração de algum caracter especial contido na base de dados e não reconhecido pelo GGPLOT do R.
+
+Por fim, o desafio de trabalhar com os dados reais foi muito interessante porque possibilitou refletir sobre ações que precisam ser tomadas de forma prévia para depois se aplicar uma determinada ferramenta ou teoria.
